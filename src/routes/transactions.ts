@@ -55,41 +55,33 @@ export async function transactionsRoutes(app: FastifyInstance) {
     },
   )
 
-  app.post(
-    '/',
-    {
-      preHandler: [checkSessionIdExists],
-    },
-    async (request, reply) => {
-      const createTransactionSchema = z.object({
-        title: z.string(),
-        amount: z.number(),
-        type: z.enum(['credit', 'debit']),
+  app.post('/', async (request, reply) => {
+    const createTransactionSchema = z.object({
+      title: z.string(),
+      amount: z.number(),
+      type: z.enum(['credit', 'debit']),
+    })
+
+    const { title, amount, type } = createTransactionSchema.parse(request.body)
+
+    let sessionId = request.cookies.sessionId
+
+    if (!sessionId) {
+      sessionId = randomUUID()
+
+      reply.cookie('sessionId', sessionId, {
+        path: '/',
+        maxAge: 60 * 60 * 24 * 7, // 1 week
       })
+    }
 
-      const { title, amount, type } = createTransactionSchema.parse(
-        request.body,
-      )
+    await knex('transactions').insert({
+      id: crypto.randomUUID(),
+      title,
+      amount: type === 'credit' ? amount : amount * -1,
+      session_id: sessionId,
+    })
 
-      let sessionId = request.cookies.sessionId
-
-      if (!sessionId) {
-        sessionId = randomUUID()
-
-        reply.cookie('sessionId', sessionId, {
-          path: '/',
-          maxAge: 60 * 60 * 24 * 7, // 1 week
-        })
-      }
-
-      await knex('transactions').insert({
-        id: crypto.randomUUID(),
-        title,
-        amount: type === 'credit' ? amount : amount * -1,
-        session_id: sessionId,
-      })
-
-      return reply.status(201).send()
-    },
-  )
+    return reply.status(201).send()
+  })
 }
